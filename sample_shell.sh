@@ -1,28 +1,20 @@
-import base64
 import os
 import subprocess
-from email.utils import formatdate
+import tempfile
 
 # === CONFIG ===
 sender = "your@email.com"
 recipient = "recipient@example.com"
 subject = "📊 Monthly Report Attached"
 attachment_paths = ["/path/to/file1.pdf", "/path/to/file2.xlsx"]
-zip_file = "/tmp/attachments.zip"
-encoded_file = "/tmp/encoded_attachment.txt"
 
-# === ZIP FILES ===
-os.system(f"zip -j {zip_file} {' '.join(attachment_paths)}")
+# === Step 1: Zip attachments ===
+zip_path = "/tmp/attachments.zip"
+os.system(f"zip -j {zip_path} {' '.join(attachment_paths)}")
 
-# === BASE64 ENCODE ===
-with open(zip_file, "rb") as f_in, open(encoded_file, "w") as f_out:
-    base64.encode(f_in, f_out)
-
-# === MIME BOUNDARY ===
-boundary = "MYBOUNDARY123"
-
-# === HTML BODY WITH TABLE ===
-html_body = f"""<html>
+# === Step 2: Create HTML body with a table ===
+html_body = """
+<html>
   <body>
     <h2 style='color:blue;'>Hello,</h2>
     <p>Please find the attached report for this month. Below is a summary:</p>
@@ -33,36 +25,26 @@ html_body = f"""<html>
     </table>
     <br><p>Regards,<br><b>Your Name</b></p>
   </body>
-</html>"""
-
-# === BUILD RAW EMAIL ===
-with open(encoded_file, "r") as f:
-    encoded_data = f.read()
-
-email_content = f"""From: {sender}
-To: {recipient}
-Subject: {subject}
-Date: {formatdate(localtime=True)}
-MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="{boundary}"
-
---{boundary}
-Content-Type: text/html; charset=UTF-8
-Content-Transfer-Encoding: 7bit
-
-{html_body}
-
---{boundary}
-Content-Type: application/zip; name="attachments.zip"
-Content-Transfer-Encoding: base64
-Content-Disposition: attachment; filename="attachments.zip"
-
-{encoded_data}
---{boundary}--
+</html>
 """
 
-# === SEND MAIL USING sendmail ===
-process = subprocess.Popen(["/usr/sbin/sendmail", "-t", "-oi"], stdin=subprocess.PIPE)
-process.communicate(email_content.encode("utf-8"))
+# === Step 3: Write HTML to a temp file ===
+with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".html") as tmp_body_file:
+    tmp_body_file.write(html_body)
+    body_file_path = tmp_body_file.name
 
-print("✅ Email sent successfully.")
+# === Step 4: Send using mailx with MIME and attachment ===
+# Use the `-a` option to attach files and `-s` for subject
+# `-a` works on modern mailx (Heirloom or BSD-compatible)
+command = f"""mailx -a {zip_path} -s "{subject}" -r "{sender}" -a "Content-Type: text/html" {recipient} < {body_file_path}"""
+
+result = subprocess.run(command, shell=True)
+
+# === Cleanup ===
+os.remove(zip_path)
+os.remove(body_file_path)
+
+if result.returncode == 0:
+    print("✅ Email sent successfully with mailx.")
+else:
+    print("❌ Failed to send email.")
