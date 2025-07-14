@@ -1,0 +1,51 @@
+import smtplib
+import os
+from email.message import EmailMessage
+
+def send_email_outlook_smtp(sender, password, to_email, cc_emails, subject, html_body_path, csv_path):
+    msg = EmailMessage()
+    msg['From'] = sender
+    msg['To'] = to_email
+    if cc_emails:
+        msg['Cc'] = ", ".join(cc_emails)
+    msg['Subject'] = subject
+
+    # HTML body
+    with open(html_body_path, 'r') as f:
+        html_body = f.read()
+    msg.set_content("Please view this email in HTML format.")
+    msg.add_alternative(html_body, subtype='html')
+
+    # Attach CSV file
+    with open(csv_path, 'rb') as f:
+        msg.add_attachment(f.read(),
+                           maintype='text',
+                           subtype='csv',
+                           filename=os.path.basename(csv_path))
+
+    # Attach HTML file
+    with open(html_body_path, 'rb') as f:
+        msg.add_attachment(f.read(),
+                           maintype='text',
+                           subtype='html',
+                           filename=os.path.basename(html_body_path))
+
+    try:
+        with smtplib.SMTP('smtp.office365.com', 587) as smtp:
+            smtp.starttls()
+            smtp.login(sender, password)
+            smtp.send_message(msg)
+            print("✅ Email sent successfully.")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
+# Example usage
+send_email_outlook_smtp(
+    sender="your.email@outlook.com",
+    password="your_password_here",  # You can use App Passwords if 2FA is enabled
+    to_email="recipient@domain.com",
+    cc_emails=["cc1@domain.com", "cc2@domain.com"],
+    subject="Data Extract Completed",
+    html_body_path="result.html",
+    csv_path="result.csv"
+)
